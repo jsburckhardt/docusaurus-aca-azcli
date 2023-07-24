@@ -84,9 +84,9 @@ make deploy
 
 ## Summary
 
-This workflow distinctly delineates the responsibilities of the operations team, effectively mitigating the need for the development team to grapple with intricate configurations when deploying a new version of their application. More succinctly, the operations team can secure the infrastructure from inception, while developers are enabled to focus on their development tasks without having to comprehend the complexities of infrastructure configurations.
+In this workflow, the operations team has their tasks cut out for them, which means the dev team doesn't have to worry about fiddling with complicated setups when rolling out a new version of their app. Plus, the operations team takes care of securing the infrastructure right from the bootstrap, leaving the dev team to concentrate on making their app the best it can be without getting tangled in the nuts and bolts of infrastructure configurations.
 
-Nevertheless, one notable challenge with this workflow is that it necessitates the container application to be set in `single` mode for the revisions. Moreover, the initial state of the container application might manifest as `Degraded` state. This is primarily due to the potential discrepancy between the exposed port and the port used by the application that is being built and deployed.
+But, it's not all smooth sailing. One hiccup we've noticed with this workflow is that it requires the container app to be set in 'single' mode when making revisions. Also, when you first look at the state of the container app, it might show up as 'Degraded'. Why? Well, it mainly happens because there might be a mismatch between the port that's exposed and the port used by the app that's being built and deployed.
 
 ### Pros
 
