@@ -1,92 +1,65 @@
-# Docusaurus-aca (Docusaurus in Azure Container App)
+# Docusaurus-aca-azcli (Docusaurus in Azure Container App using azcli deployment)
 
-This repository includes a simple Docusaurus Site with a basic template for hosting product documentation. The repo structure is planned for developing using within the [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers)/[Codespaces](https://code.visualstudio.com/docs/remote/codespaces) and deploy using [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd).
+This repository includes a simple Docusaurus Site with a basic template for hosting product documentation. The repository is a helper for exploring different `DevOps` options for Container Apps cse-devblog
 
-## Basic documentation structure
+This flow takes advantage of the `Azure CLI - containerapp update` command for updating the application after the bootstrap of the infrastructure. [link](https://learn.microsoft.com/en-us/cli/azure/containerapp?view=azure-cli-latest#az-containerapp-update)
 
-```bash
-src/docusaurus/docs
-├── 01-intro.md
-├── 02-getting-started
-├── 03-tutorials
-├── 04-docs
-└── 05-contributing
-```
+## Bootstrap Infrastructure
 
-## Local Development
-
-All dependencies are installed as part of the devcontainer bootstrap. So, for starting the site:
+Validate you are connected to an Azure subscription and update `infra/sample.main.parameters.json` to `infra/main.parameters.json` with your details.
 
 ```bash
-cd src/docusaurus
-make dev
+make bootstrap
 ```
 
-Now you can visit localhost:3000
+For this flow, the infrastructure bootstrapped looks like this:
 
-### Linters and spellcheck
+![architecture](readme_diagram.png)
 
-```bash
-make lint
-make spellcheck
-# fix common linting issues
-make lint-fix
-```
+## Deploy application
 
-## Deploy to azure
+For the demo, we will be orchestrating the deployment locally. In other words, we will be running the pipeline commands locally. A sample pipeline is included in the ci folder.
 
-Everything is deploy and manage through `AZD`. The main configuration file is `azure.yaml`. If you want to have a look into the schema and options please have a read [here](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/azd-schema)
+1. Build the container
 
-### Step by step
-
-1. connect AZD to azure
+    After running the bootstrap, in this step we will be creating the docker container and pushing it into the bootstrapped ACR.
 
     ```bash
-    azd auth login
+    make ci-package
     ```
 
-2. validate the package is able to get containerize (will use latest tag -> if other tag required, please `export RELEASE_VERSION=<your tag>`). The pre package hook, will set the environment to tag the container image as `docusaurus-aca:<your tag>`.
+2. use `az cli` to update the containerapp.
 
-    ```bash
-    azd package
+    ```make
+    make deploy
     ```
 
-3. create the azure resources
+## Continuous deployment
 
-    ```bash
-    # when running the ocommand, you'll need to configure the subs/location
-    # by default the bicep templates will create a revision with a sample image
-    azd provision
-    ```
-
-4. deploy the application
-
-    ```bash
-    azd deploy
-    ```
-
-### Short Cut
+In this flow, the continuous deployment depends on the team updating the version of the image and simply exporting the new version as `RELEASE` before running the `make deploy`. In other words, the team only includes that step in their release pipeline.
 
 ```bash
-azd up
+export RELEASE=v1.0.0
+make ci-package
+make deploy
 ```
 
-## Configuring Github Workflow
+## Summary
 
-This will allow you to configure a service principal in azure and federate it to your github account. After you finish the configuration, you can see a set of variables set in the repository.
+This workflow distinctly delineates the responsibilities of the operations team, effectively mitigating the need for the development team to grapple with intricate configurations when deploying a new version of their application. More succinctly, the operations team can secure the infrastructure from inception, while developers are enabled to focus on their development tasks without having to comprehend the complexities of infrastructure configurations.
 
-```bash
-azd pipeline config
-```
+Nevertheless, one notable challenge with this workflow is that it necessitates the container application to be set in `single` mode for the revisions. Moreover, the initial state of the container application might manifest as `Degraded` state. This is primarily due to the potential discrepancy between the exposed port and the port used by the application that is being built and deployed.
 
-## Infrastructure
+### Pros
 
-All the infrastructure that is being deployed can be found in the `infra` directory. In summary it creates:
+- Simplified Deployment: The development team is spared from having to understand and handle complex infrastructure configurations. This allows them to focus on their main task, which is developing the application.
+- Clear Division of Responsibilities: The operations team and the development team have distinct roles, ensuring that each team can focus on their core competencies.
+- Enhanced Security: With the operations team managing the infrastructure from the outset, there is likely to be better control and implementation of security measures.
 
-- Azure Container App
-- Azure Container App Environment
-- Managed Identity (with pull role to the ACR)
-- Azure Container Registry
-- Log Analytics
+### Cons
 
-![Diagram of app architecture](readme_diagram.png)
+- bootstrap will look in a `Degraded` state because of the port misconfiguration.
+- Containerapp `update` command doesn't allow the user to modify the port. Therefore the bootstrapped infrastructure can be pointing to the wrong port of the sample container image.
+- Even though the `up` command allows the user to modify the target port, it requires all the configuration plus doesn't seem to have the option to setting the managed identity as the credentials to pull images from a private registry.
+- Single Mode Constraint: The requirement for the container application to be in `single` mode for the revisions may limit the flexibility and functionality of the workflow.
+- Port Discrepancy: The exposed port might differ from the port used by the application being built and deployed, potentially leading to communication issues or other conflicts within the application environment.

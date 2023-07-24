@@ -1,2 +1,5 @@
 devcontainer
 Linters
+azcli
+devblog
+containerapp

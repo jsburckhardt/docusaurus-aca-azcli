@@ -1,69 +1,114 @@
+// scope
 targetScope = 'subscription'
 
-@minLength(1)
-@maxLength(64)
-@description('Name which is used to generate a short unique hash for each resource')
-param name string
+// parameters
+param function string = 'sampleyaml'
+param env string = 'dev'
+param location string = 'australiaeast'
 
-@minLength(1)
-@description('Primary location for all resources')
-param location string
 
-param apiAppExists bool = false
+// variables
+var resGroupName = 'rsg-${function}-${env}'
+var managedEnvName = 'me-${function}-${env}'
+var containerRegistryName = 'acr${function}${env}'
+var logWorkspaceName = 'lw-${function}-${env}'
+var appname = 'app-${function}-${env}'
 
-var resourceToken = toLower(uniqueString(subscription().id, name, location))
-var tags = { 'azd-env-name': name }
+var tags = { blogdemo: appname }
 
-resource resourceGroup 'Microsoft.Resources/resourceGroups@2021-04-01' = {
-  name: '${name}-rg'
+// resource group
+resource resGroup 'Microsoft.Resources/resourceGroups@2022-09-01' = {
+  name: resGroupName
   location: location
-  tags: tags
+  tags: {
+    project: 'edifice'
+    team: 'casg'
+    purpose: 'casg sites'
+  }
 }
 
-var prefix = '${name}-${resourceToken}'
-
-
-// Container apps host (including container registry)
-module containerApps 'core/host/container-apps.bicep' = {
-  name: 'container-apps'
-  scope: resourceGroup
+module managedEnvironment 'core/host/container-apps-environment.bicep' = {
+  scope: resGroup
+  name: managedEnvName
   params: {
-    name: 'app'
     location: location
-    tags: tags
-    containerAppsEnvironmentName: '${prefix}-containerapps-env'
-    containerRegistryName: '${replace(prefix, '-', '')}registry'
+    name: managedEnvName
     logAnalyticsWorkspaceName: logAnalyticsWorkspace.outputs.name
   }
+  dependsOn: [
+    logAnalyticsWorkspace
+  ]
 }
 
-// API app
-module api 'docusaurus.bicep' = {
-  name: 'docusaurus'
-  scope: resourceGroup
+module containerApp 'core/host/container-app.bicep' = {
+  scope: resGroup
+  name: 'containerapp-${appname}'
   params: {
-    name: replace('${take(prefix,19)}-ca', '--', '-')
+    name: appname
     location: location
     tags: tags
-    identityName: '${prefix}-id-api'
-    containerAppsEnvironmentName: containerApps.outputs.environmentName
-    containerRegistryName: containerApps.outputs.registryName
-    exists: apiAppExists
+    imageName: ''
+    containerName: 'docusaurus'
+    containerAppsEnvironmentName: managedEnvironment.name
+    containerRegistryName: containerRegistryName
+    identityName: appIdentity.name
+    targetPort: 3000
   }
+  dependsOn: [
+    containerRegistry
+    managedEnvironment
+    containerRegistryAccess
+  ]
 }
-
 
 module logAnalyticsWorkspace 'core/monitor/loganalytics.bicep' = {
   name: 'loganalytics'
-  scope: resourceGroup
+  scope: resGroup
   params: {
-    name: '${prefix}-loganalytics'
+    name: logWorkspaceName
     location: location
     tags: tags
   }
 }
 
-output AZURE_LOCATION string = location
-output AZURE_CONTAINER_ENVIRONMENT_NAME string = containerApps.outputs.environmentName
-output AZURE_CONTAINER_REGISTRY_NAME string = containerApps.outputs.registryName
-output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerApps.outputs.registryLoginServer
+module appIdentity 'core/security/identity.bicep' = {
+  name: appname
+  scope: resGroup
+  params: {
+    appname: appname
+    location: location
+    tags: tags
+  }
+}
+
+module containerRegistry 'core/host/container-registry.bicep' = {
+  name: containerRegistryName
+  scope: resGroup
+  params: {
+    name: containerRegistryName
+    location: location
+    tags: tags
+    workspaceId: logAnalyticsWorkspace.outputs.id
+  }
+}
+
+module containerRegistryAccess 'core/security/registry-access.bicep' = {
+  scope: resGroup
+  name: '${deployment().name}-registry-access'
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: appIdentity.outputs.apiIdentityPrincipalId
+  }
+  dependsOn: [
+    containerRegistry
+  ]
+}
+
+output apiIdentityId string = appIdentity.outputs.apiIdentityId
+output apiIdentityPrincipalId string = appIdentity.outputs.apiIdentityPrincipalId
+output apiIdentityName string = appIdentity.outputs.apiIdentityName
+output managedEnvironmentId string = managedEnvironment.outputs.managedEnvironmentId
+output containerRegistryName string = containerRegistry.outputs.name
+output containerRegistryServer string = containerRegistry.outputs.loginServer
+output resourceGroupName string = resGroup.name
+output containerAppEndPoint string = containerApp.outputs.uri

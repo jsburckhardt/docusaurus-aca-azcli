@@ -44,14 +44,6 @@ resource userIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-
   name: identityName
 }
 
-module containerRegistryAccess '../security/registry-access.bicep' = {
-  name: '${deployment().name}-registry-access'
-  params: {
-    containerRegistryName: containerRegistryName
-    principalId: userIdentity.properties.principalId
-  }
-}
-
 resource app 'Microsoft.App/containerApps@2022-03-01' = {
   name: name
   location: location
@@ -60,7 +52,6 @@ resource app 'Microsoft.App/containerApps@2022-03-01' = {
   // otherwise the container app will throw a provision error
   // This also forces us to use an user assigned managed identity since there would no way to
   // provide the system assigned identity with the ACR pull access before the app is created
-  dependsOn: [ containerRegistryAccess ]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${userIdentity.id}': {} }
