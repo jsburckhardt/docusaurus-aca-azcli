@@ -12,6 +12,12 @@ Validate you are connected to an Azure subscription and update `infra/sample.mai
 make bootstrap
 ```
 
+or
+
+```bash
+az deployment sub create --name docusaurus-aca-azcli --template-file infra/main.bicep --parameters infra/main.parameters.json --location australiaeast
+```
+
 For this flow, the infrastructure bootstrapped looks like this:
 
 ![architecture](readme_diagram.png)
@@ -28,10 +34,42 @@ For the demo, we will be orchestrating the deployment locally. In other words, w
     make ci-package
     ```
 
+    or
+
+    ```bash
+    # package
+    DOCS_VERSION=${RELEASE:-local}
+    export ACR=$(az deployment sub show -n docusaurus-aca-azcli --query 'properties.outputs.containerRegistryServer.value' -o tsv)
+
+    docker build \
+        -t docusaurus:$DOCS_VERSION \
+        -f ./ci/Dockerfile \
+        ./src/docusaurus
+
+    # tag
+    docker tag docusaurus:$DOCS_VERSION $ACR/docusaurus:$DOCS_VERSION
+    docker tag docusaurus:$DOCS_VERSION $ACR/docusaurus:latest
+
+    # push
+    az acr login -n $ACR
+    docker push $ACR/docusaurus:$DOCS_VERSION
+    docker push $ACR/docusaurus:latest
+    ```
+
 2. use `az cli` to update the containerapp.
 
     ```make
     make deploy
+    ```
+
+    or
+
+    ```bash
+    export RG=$(az deployment sub show -n docusaurus-aca-azcli --query 'properties.outputs.resourceGroupName.value' -o tsv)
+    export ACR=$(az deployment sub show -n docusaurus-aca-azcli --query 'properties.outputs.containerRegistryServer.value' -o tsv)
+    export APPNAME=$(az deployment sub show -n docusaurus-aca-azcli --query 'properties.outputs.apiIdentityName.value' -o tsv)
+    az containerapp update -n $APPNAME -g $RG --image $ACR/docusaurus:$DOCS_VERSION
+    echo URI: $(az deployment sub show -n docusaurus-aca-azcli --query 'properties.outputs.containerAppEndPoint.value' -o tsv)
     ```
 
 ## Continuous deployment
