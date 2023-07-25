@@ -1,0 +1,51 @@
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-22.04
+
+variables:
+  containerRegistry: '<registry>'
+  repository: '<repo>'
+  dockerfilePath: '$(Build.SourcesDirectory)/ci/Dockerfile'
+  azureServiceConnection: '<subscription>'
+  containerAppName: docusaurus
+  containerAppRG: <resourcegroup>
+
+stages:
+- stage: Test
+  displayName: Test
+  jobs:
+  - job: LintJob
+    steps:
+      - checkout: self
+        persistCredentials: true
+      - script: |
+          npm install -g markdownlint
+          npm install -g markdownlint-cli
+          npm install -g cspell@latest
+          make lint
+          make spellcheck
+        name: LintDocs
+
+- stage: Release
+  condition: and(succeeded(), in(variables['Build.SourceBranch'], 'refs/heads/main','refs/heads/dev'))
+  jobs:
+  - job: ReleaseJob
+    steps:
+      # azcli task
+      - task: AzureCLI@2
+        inputs:
+          azureSubscription: '$(azureServiceConnection)'
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: 'az acr login -n $(containerRegistry)'
+      - script: |
+          npm install @semantic-release/exec
+          npm install semantic-release-ado
+          npm install @semantic-release/git @semantic-release/changelog -D
+          npx semantic-release
+        env:
+          GH_TOKEN: $(System.AccessToken)
+          ACR: $(containerRegistry)
+        displayName: Create release
